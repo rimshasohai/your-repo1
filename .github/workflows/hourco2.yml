@@ -139,15 +139,23 @@ if __name__ == "__main__":
     collect_one_hour()
 EOF
 
+      - name: 🔍 Debug File Structure
+        run: |
+          echo "📁 Files in workspace:"
+          ls -R
+
       - name: 📂 Commit and Push Data
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
+          
+          git fetch origin ${{ github.ref_name }}
           git checkout ${{ github.ref_name }}
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}
-          git add data/
+
+          git add -A data/
+          git status
           git commit -m "📊 Hourly AQI + Weather + Forecast update - $(date -u)" || echo "No changes to commit"
           git push
-
