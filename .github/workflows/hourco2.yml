@@ -73,18 +73,42 @@ jobs:
                   print("Weather Error:", e)
                   return None
 
+          def get_forecast():
+              try:
+                  url = f"http://api.openweathermap.org/data/2.5/forecast?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}&units=metric"
+                  r = requests.get(url)
+                  r.raise_for_status()
+                  data = r.json()
+                  forecasts = data.get("list", [])
+                  rows = []
+                  for entry in forecasts[:24]:
+                      dt = datetime.datetime.utcfromtimestamp(entry["dt"])
+                      rows.append({
+                          "datetime": dt.isoformat(),
+                          "temp": entry["main"]["temp"],
+                          "humidity": entry["main"]["humidity"],
+                          "pressure": entry["main"]["pressure"],
+                          "wind_speed": entry["wind"]["speed"]
+                      })
+                  return pd.DataFrame(rows)
+              except Exception as e:
+                  print("Forecast Error:", e)
+                  return pd.DataFrame()
+
           def collect_one_hour():
               now = datetime.datetime.utcnow()
               date_str = now.strftime("%Y-%m-%d")
               time_str = now.strftime("%H:%M:%S")
-              hour = now.hour + 1  # 1-24 hour format
+              hour = now.hour + 1
 
               folder_path = f"data/{date_str}"
               os.makedirs(folder_path, exist_ok=True)
               csv_path = f"{folder_path}/karachi.csv"
+              forecast_path = f"{folder_path}/forecast.csv"
 
               pollutants = get_pollutants()
               weather = get_weather()
+              forecast = get_forecast()
 
               if pollutants is None or weather is None:
                   print("❌ Data not available")
@@ -104,14 +128,17 @@ jobs:
               else:
                   df.to_csv(csv_path, index=False)
 
+              if not forecast.empty:
+                  forecast.to_csv(forecast_path, index=False)
+
           if __name__ == "__main__":
               collect_one_hour()
           EOF
 
-      - name: 💾 Commit and Push Data
+      - name: 📂 Commit and Push Data
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add data/
-          git commit -m "📊 Hourly AQI update - $(date -u)" || echo "No changes"
+          git commit -m "📊 Hourly AQI + Weather + Forecast update - $(date -u)" || echo "No changes"
           git push
