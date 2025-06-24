@@ -2,12 +2,10 @@ name: Hourly AQI Logger
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Every hour (UTC)
-  workflow_dispatch:      # Allows manual run
+    - cron: '0 * * * *'  # Every hour on the hour (UTC)
 
 jobs:
   log-aqi:
-    name: Log AQI Data
     runs-on: ubuntu-latest
 
     steps:
@@ -22,8 +20,9 @@ jobs:
       - name: 📦 Install Required Libraries
         run: pip install pandas requests
 
-      - name: 🚀 Run AQI Script
+      - name: 🚀 Run AQI Logger Script
         run: |
+          mkdir -p data
           python - <<EOF
 import requests
 import pandas as pd
@@ -140,20 +139,15 @@ if __name__ == "__main__":
     collect_one_hour()
 EOF
 
-      - name: 🔍 Debug: Show Files
-        run: |
-          echo "Files:"
-          ls -R
-
-      - name: 📂 Commit and Push Data
+      - name: 📂 Commit and Push Data Folder
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
+          git fetch
           git checkout ${{ github.ref_name }}
-          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}
-
           git add -A data/
-          git commit -m "📊 Hourly AQI data update - $(date -u)" || echo "No changes to commit"
+          git commit -m "📊 Hourly AQI update - $(date -u)" || echo "No changes to commit"
           git push
+
