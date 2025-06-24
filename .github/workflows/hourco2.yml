@@ -1,0 +1,117 @@
+name: Hourly AQI Logger
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Every hour at 00 min UTC
+  workflow_dispatch:
+
+jobs:
+  log-aqi:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ✅ Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set Up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install Required Libraries
+        run: pip install pandas requests
+
+      - name: 🚀 Run Inline AQI Logger Script
+        run: |
+          python - <<EOF
+          import requests
+          import pandas as pd
+          import datetime
+          import os
+
+          OPENWEATHER_KEY = "ee88310481e99a7843bdedc0cca27fd1"
+          CITY = "Karachi"
+          COUNTRY = "PK"
+          LAT = 24.8607
+          LON = 67.0011
+
+          def get_pollutants():
+              try:
+                  url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}"
+                  r = requests.get(url)
+                  r.raise_for_status()
+                  data = r.json()
+                  components = data["list"][0]["components"]
+                  aqi_index = data["list"][0]["main"]["aqi"]
+                  return {
+                      "aqi_index": aqi_index,
+                      "pm2_5": components.get("pm2_5"),
+                      "pm10": components.get("pm10"),
+                      "co": components.get("co"),
+                      "no2": components.get("no2"),
+                      "o3": components.get("o3"),
+                      "so2": components.get("so2"),
+                      "nh3": components.get("nh3")
+                  }
+              except Exception as e:
+                  print("Pollutants Error:", e)
+                  return None
+
+          def get_weather():
+              try:
+                  url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY},{COUNTRY}&appid={OPENWEATHER_KEY}&units=metric"
+                  r = requests.get(url)
+                  r.raise_for_status()
+                  data = r.json()
+                  return {
+                      "temp": data["main"].get("temp"),
+                      "humidity": data["main"].get("humidity"),
+                      "pressure": data["main"].get("pressure"),
+                      "wind_speed": data["wind"].get("speed")
+                  }
+              except Exception as e:
+                  print("Weather Error:", e)
+                  return None
+
+          def collect_one_hour():
+              now = datetime.datetime.utcnow()
+              date_str = now.strftime("%Y-%m-%d")
+              time_str = now.strftime("%H:%M:%S")
+              hour = now.hour + 1  # 1-24 hour format
+
+              folder_path = f"data/{date_str}"
+              os.makedirs(folder_path, exist_ok=True)
+              csv_path = f"{folder_path}/karachi.csv"
+
+              pollutants = get_pollutants()
+              weather = get_weather()
+
+              if pollutants is None or weather is None:
+                  print("❌ Data not available")
+                  return
+
+              row = {
+                  "date": date_str,
+                  "time": time_str,
+                  "hour": hour,
+                  **pollutants,
+                  **weather
+              }
+
+              df = pd.DataFrame([row])
+              if os.path.exists(csv_path):
+                  df.to_csv(csv_path, mode='a', header=False, index=False)
+              else:
+                  df.to_csv(csv_path, index=False)
+
+          if __name__ == "__main__":
+              collect_one_hour()
+          EOF
+
+      - name: 💾 Commit and Push Data
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add data/
+          git commit -m "📊 Hourly AQI update - $(date -u)" || echo "No changes"
+          git push
