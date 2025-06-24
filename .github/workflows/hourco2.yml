@@ -2,7 +2,7 @@ name: Hourly AQI + AQICN Logger
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Every hour UTC
+    - cron: '0 * * * *'  # Every hour
   workflow_dispatch:
 
 jobs:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: ✅ Checkout Repo
+      - name: ✅ Checkout Code
         uses: actions/checkout@v4
 
       - name: 🐍 Set up Python
@@ -19,23 +19,20 @@ jobs:
           python-version: '3.10'
 
       - name: 📦 Install Dependencies
-        run: |
-          pip install requests pandas
+        run: pip install pandas requests
 
-      - name: 📊 Fetch AQI + AQICN Data
+      - name: 📝 Run Inline AQI + AQICN Script
+        shell: bash
         run: |
           mkdir -p data
-          python3 <<EOF
+          echo '
 import os
 import datetime
 import pandas as pd
 import requests
 
-# --- API KEYS ---
 OPENWEATHER_KEY = "ee88310481e99a7843bdedc0cca27fd1"
 AQICN_TOKEN = "2eb7e59a27fec6826892da8d9b3f9ff95e6c573e"
-
-# --- Location Info ---
 CITY = "Karachi"
 COUNTRY = "PK"
 LAT = 24.8607
@@ -65,8 +62,9 @@ def get_openweather_data():
 
 def get_aqicn_data():
     try:
-        aqicn_url = f"https://api.waqi.info/feed/geo:{LAT};{LON}/?token={AQICN_TOKEN}"
-        data = requests.get(aqicn_url).json()
+        url = f"https://api.waqi.info/feed/geo:{LAT};{LON}/?token={AQICN_TOKEN}"
+        r = requests.get(url)
+        data = r.json()
         if data["status"] != "ok":
             return {}
         iaqi = data["data"]["iaqi"]
@@ -99,10 +97,11 @@ row = {
 df = pd.DataFrame([row])
 csv_path = f"{folder}/combined_aqi.csv"
 if os.path.exists(csv_path):
-    df.to_csv(csv_path, mode='a', header=False, index=False)
+    df.to_csv(csv_path, mode="a", header=False, index=False)
 else:
     df.to_csv(csv_path, index=False)
-EOF
+' > inline_logger.py
+          python3 inline_logger.py
 
       - name: 📤 Commit and Push Data
         env:
@@ -110,9 +109,9 @@ EOF
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
-          git fetch
           git checkout ${{ github.ref_name }}
-          git add -A data/
-          git commit -m "📊 Combined AQI + AQICN log - $(date -u)" || echo "No changes to commit"
+          git add data/
+          git commit -m "📊 Hourly AQI + AQICN data - $(date -u)" || echo "No changes to commit"
           git push
+
 
