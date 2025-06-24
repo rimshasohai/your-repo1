@@ -2,7 +2,7 @@ name: Hourly AQI + AQICN Logger
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 * * * *'  # Every hour
   workflow_dispatch:
 
 jobs:
@@ -10,98 +10,94 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: ✅ Checkout Code
+      - name: ✅ Checkout Repo
         uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: 📦 Install Dependencies
+      - name: 📦 Install Libraries
         run: pip install pandas requests
 
-      - name: 📝 Create and Run Inline Script
-        shell: bash
+      - name: 📝 Run Inline AQI + AQICN Logger
+        shell: python
         run: |
-          mkdir -p data
-          cat > aqi_logger.py << 'EOF'
-import os
-import datetime
-import pandas as pd
-import requests
+          import os
+          import datetime
+          import pandas as pd
+          import requests
 
-OPENWEATHER_KEY = "ee88310481e99a7843bdedc0cca27fd1"
-AQICN_TOKEN = "2eb7e59a27fec6826892da8d9b3f9ff95e6c573e"
-CITY = "Karachi"
-COUNTRY = "PK"
-LAT = 24.8607
-LON = 67.0011
+          OPENWEATHER_KEY = "ee88310481e99a7843bdedc0cca27fd1"
+          AQICN_TOKEN = "2eb7e59a27fec6826892da8d9b3f9ff95e6c573e"
+          CITY = "Karachi"
+          COUNTRY = "PK"
+          LAT = 24.8607
+          LON = 67.0011
 
-def get_openweather_data():
-    try:
-        air_url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}"
-        weather_url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY},{COUNTRY}&appid={OPENWEATHER_KEY}&units=metric"
-        air = requests.get(air_url).json()
-        weather = requests.get(weather_url).json()
-        components = air["list"][0]["components"]
-        aqi = air["list"][0]["main"]["aqi"]
-        return {
-            "ow_aqi": aqi,
-            "ow_pm2_5": components.get("pm2_5"),
-            "ow_pm10": components.get("pm10"),
-            "ow_co": components.get("co"),
-            "ow_no2": components.get("no2"),
-            "ow_o3": components.get("o3"),
-            "ow_temp": weather["main"]["temp"],
-            "ow_humidity": weather["main"]["humidity"]
-        }
-    except Exception as e:
-        print("OpenWeather Error:", e)
-        return {}
+          def get_openweather_data():
+              try:
+                  air_url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}"
+                  weather_url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY},{COUNTRY}&appid={OPENWEATHER_KEY}&units=metric"
+                  air = requests.get(air_url).json()
+                  weather = requests.get(weather_url).json()
+                  components = air["list"][0]["components"]
+                  aqi = air["list"][0]["main"]["aqi"]
+                  return {
+                      "ow_aqi": aqi,
+                      "ow_pm2_5": components.get("pm2_5"),
+                      "ow_pm10": components.get("pm10"),
+                      "ow_co": components.get("co"),
+                      "ow_no2": components.get("no2"),
+                      "ow_o3": components.get("o3"),
+                      "ow_temp": weather["main"]["temp"],
+                      "ow_humidity": weather["main"]["humidity"]
+                  }
+              except Exception as e:
+                  print("OpenWeather Error:", e)
+                  return {}
 
-def get_aqicn_data():
-    try:
-        url = f"https://api.waqi.info/feed/geo:{LAT};{LON}/?token={AQICN_TOKEN}"
-        r = requests.get(url)
-        data = r.json()
-        if data["status"] != "ok":
-            return {}
-        iaqi = data["data"]["iaqi"]
-        return {
-            "aqicn_aqi": data["data"].get("aqi"),
-            "aqicn_pm2_5": iaqi.get("pm25", {}).get("v"),
-            "aqicn_pm10": iaqi.get("pm10", {}).get("v"),
-            "aqicn_no2": iaqi.get("no2", {}).get("v"),
-            "aqicn_o3": iaqi.get("o3", {}).get("v"),
-            "aqicn_temp": iaqi.get("t", {}).get("v"),
-            "aqicn_humidity": iaqi.get("h", {}).get("v")
-        }
-    except Exception as e:
-        print("AQICN Error:", e)
-        return {}
+          def get_aqicn_data():
+              try:
+                  url = f"https://api.waqi.info/feed/geo:{LAT};{LON}/?token={AQICN_TOKEN}"
+                  r = requests.get(url)
+                  data = r.json()
+                  if data["status"] != "ok":
+                      return {}
+                  iaqi = data["data"]["iaqi"]
+                  return {
+                      "aqicn_aqi": data["data"].get("aqi"),
+                      "aqicn_pm2_5": iaqi.get("pm25", {}).get("v"),
+                      "aqicn_pm10": iaqi.get("pm10", {}).get("v"),
+                      "aqicn_no2": iaqi.get("no2", {}).get("v"),
+                      "aqicn_o3": iaqi.get("o3", {}).get("v"),
+                      "aqicn_temp": iaqi.get("t", {}).get("v"),
+                      "aqicn_humidity": iaqi.get("h", {}).get("v")
+                  }
+              except Exception as e:
+                  print("AQICN Error:", e)
+                  return {}
 
-now = datetime.datetime.utcnow()
-date_str = now.strftime("%Y-%m-%d")
-time_str = now.strftime("%H:%M:%S")
-folder = f"data/{date_str}"
-os.makedirs(folder, exist_ok=True)
+          now = datetime.datetime.utcnow()
+          date_str = now.strftime("%Y-%m-%d")
+          time_str = now.strftime("%H:%M:%S")
+          folder = f"data/{date_str}"
+          os.makedirs(folder, exist_ok=True)
 
-row = {
-    "date": date_str,
-    "time": time_str,
-    **get_openweather_data(),
-    **get_aqicn_data()
-}
+          row = {
+              "date": date_str,
+              "time": time_str,
+              **get_openweather_data(),
+              **get_aqicn_data()
+          }
 
-df = pd.DataFrame([row])
-csv_path = f"{folder}/combined_aqi.csv"
-if os.path.exists(csv_path):
-    df.to_csv(csv_path, mode="a", header=False, index=False)
-else:
-    df.to_csv(csv_path, index=False)
-EOF
-          python3 aqi_logger.py
+          df = pd.DataFrame([row])
+          csv_path = f"{folder}/combined_aqi.csv"
+          if os.path.exists(csv_path):
+              df.to_csv(csv_path, mode="a", header=False, index=False)
+          else:
+              df.to_csv(csv_path, index=False)
 
       - name: 📤 Commit and Push Data
         env:
