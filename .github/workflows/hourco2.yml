@@ -22,8 +22,6 @@ jobs:
         run: pip install pandas requests
 
       - name: 🚀 Run Inline AQI Logger Script
-        env:
-          OPENWEATHER_KEY: ${{ secrets.OPENWEATHER_KEY }}
         run: |
           python - <<EOF
 import requests
@@ -31,7 +29,7 @@ import pandas as pd
 import datetime
 import os
 
-OPENWEATHER_KEY = os.getenv("OPENWEATHER_KEY")
+OPENWEATHER_KEY = "ee88310481e99a7843bdedc0cca27fd1"
 CITY = "Karachi"
 COUNTRY = "PK"
 LAT = 24.8607
