@@ -1,0 +1,2 @@
+date,time,ow_aqi,ow_pm2_5,ow_pm10,ow_co,ow_no2,ow_o3,ow_temp,ow_humidity,aqicn_aqi,aqicn_pm2_5,aqicn_pm10,aqicn_no2,aqicn_o3,aqicn_temp,aqicn_humidity
+2025-07-01,01:45:52,3,17.69,71.85,71.18,0.11,45.49,28.9,79,60,60,24,1.8,1.9,26,79.565
