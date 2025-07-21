@@ -1,4 +1,4 @@
-name: Hourly AQI + AQICN Logger
+name: Hourly AQI Logger
 
 on:
   schedule:
@@ -13,102 +13,145 @@ jobs:
       - name: ✅ Checkout Repo
         uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
+      - name: 🐍 Set Up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: 📦 Install Libraries
+      - name: 📦 Install Python Dependencies
         run: pip install pandas requests
 
-      - name: 📝 Run Inline AQI + AQICN Logger
-        shell: python
+      - name: 🧠 Collect and Merge AQI Data
+        env:
+          IQAIR_API_KEY: ${{ secrets.IQAIR_API_KEY }}
+          OPENWEATHER_KEY: ${{ secrets.OPENWEATHER_KEY }}
         run: |
-          import os
-          import datetime
-          import pandas as pd
+          python - <<EOF
           import requests
+          import pandas as pd
+          import datetime
+          import os
+          from glob import glob
 
+          IQAIR_KEY = "a1c4ea3c-c116-43fb-9d98-81004cf3f771"
           OPENWEATHER_KEY = "ee88310481e99a7843bdedc0cca27fd1"
-          AQICN_TOKEN = "2eb7e59a27fec6826892da8d9b3f9ff95e6c573e"
-          CITY = "Karachi"
-          COUNTRY = "PK"
+
           LAT = 24.8607
           LON = 67.0011
+          CITY = "Karachi"
+          COUNTRY = "PK"
 
-          def get_openweather_data():
+          def get_iqair_aqi():
               try:
-                  air_url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}"
-                  weather_url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY},{COUNTRY}&appid={OPENWEATHER_KEY}&units=metric"
-                  air = requests.get(air_url).json()
-                  weather = requests.get(weather_url).json()
-                  components = air["list"][0]["components"]
-                  aqi = air["list"][0]["main"]["aqi"]
-                  return {
-                      "ow_aqi": aqi,
-                      "ow_pm2_5": components.get("pm2_5"),
-                      "ow_pm10": components.get("pm10"),
-                      "ow_co": components.get("co"),
-                      "ow_no2": components.get("no2"),
-                      "ow_o3": components.get("o3"),
-                      "ow_temp": weather["main"]["temp"],
-                      "ow_humidity": weather["main"]["humidity"]
-                  }
-              except Exception as e:
-                  print("OpenWeather Error:", e)
-                  return {}
-
-          def get_aqicn_data():
-              try:
-                  url = f"https://api.waqi.info/feed/geo:{LAT};{LON}/?token={AQICN_TOKEN}"
+                  url = f"http://api.airvisual.com/v2/nearest_city?lat={LAT}&lon={LON}&key={IQAIR_KEY}"
                   r = requests.get(url)
+                  r.raise_for_status()
                   data = r.json()
-                  if data["status"] != "ok":
-                      return {}
-                  iaqi = data["data"]["iaqi"]
+                  pollution = data["data"]["current"]["pollution"]
                   return {
-                      "aqicn_aqi": data["data"].get("aqi"),
-                      "aqicn_pm2_5": iaqi.get("pm25", {}).get("v"),
-                      "aqicn_pm10": iaqi.get("pm10", {}).get("v"),
-                      "aqicn_no2": iaqi.get("no2", {}).get("v"),
-                      "aqicn_o3": iaqi.get("o3", {}).get("v"),
-                      "aqicn_temp": iaqi.get("t", {}).get("v"),
-                      "aqicn_humidity": iaqi.get("h", {}).get("v")
+                      "aqi_index": pollution["aqius"],  # AQI US scale 0-500
+                      "main_pollutant": pollution.get("mainus")
                   }
               except Exception as e:
-                  print("AQICN Error:", e)
+                  print("IQAir Pollutants Error:", e)
+                  return None
+
+          def get_weather():
+              try:
+                  url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY},{COUNTRY}&appid={OPENWEATHER_KEY}&units=metric"
+                  r = requests.get(url)
+                  r.raise_for_status()
+                  data = r.json()
+                  return {
+                      "temp": data["main"]["temp"],
+                      "humidity": data["main"]["humidity"],
+                      "pressure": data["main"]["pressure"],
+                      "wind_speed": data["wind"]["speed"]
+                  }
+              except Exception as e:
+                  print("Weather Error:", e)
+                  return None
+
+          def get_forecast_features():
+              try:
+                  url = f"http://api.openweathermap.org/data/2.5/forecast?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}&units=metric"
+                  r = requests.get(url)
+                  r.raise_for_status()
+                  data = r.json()
+                  forecasts = data["list"]
+                  out = {}
+                  for i, entry in enumerate(forecasts[:24]):
+                      out[f"forecast_{i+1}_temp"] = entry["main"]["temp"]
+                      out[f"forecast_{i+1}_humidity"] = entry["main"]["humidity"]
+                      out[f"forecast_{i+1}_pressure"] = entry["main"]["pressure"]
+                      out[f"forecast_{i+1}_wind_speed"] = entry["wind"]["speed"]
+                  return out
+              except Exception as e:
+                  print("Forecast Error:", e)
                   return {}
 
-          now = datetime.datetime.utcnow()
-          date_str = now.strftime("%Y-%m-%d")
-          time_str = now.strftime("%H:%M:%S")
-          folder = f"data/{date_str}"
-          os.makedirs(folder, exist_ok=True)
+          def collect_hourly_data():
+              now = datetime.datetime.utcnow()
+              date_str = now.strftime("%Y-%m-%d")
+              time_str = now.strftime("%H:%M:%S")
+              hour_of_day = now.hour
+              day_of_week = now.weekday()
+              is_weekend = 1 if day_of_week >= 5 else 0
 
-          row = {
-              "date": date_str,
-              "time": time_str,
-              **get_openweather_data(),
-              **get_aqicn_data()
-          }
+              folder = f"data/{date_str}"
+              os.makedirs(folder, exist_ok=True)
+              csv_path = f"{folder}/karachi.csv"
 
-          df = pd.DataFrame([row])
-          csv_path = f"{folder}/combined_aqi.csv"
-          if os.path.exists(csv_path):
-              df.to_csv(csv_path, mode="a", header=False, index=False)
-          else:
-              df.to_csv(csv_path, index=False)
+              pollutants = get_iqair_aqi()
+              weather = get_weather()
+              forecast = get_forecast_features()
 
-      - name: 📤 Commit and Push Data
+              if not pollutants or not weather or not forecast:
+                  print("❌ Incomplete data. Skipping logging.")
+                  return
+
+              row = {
+                  "date": date_str,
+                  "time": time_str,
+                  "hour_of_day": hour_of_day,
+                  "day_of_week": day_of_week,
+                  "is_weekend": is_weekend,
+                  **pollutants,
+                  **weather,
+                  **forecast
+              }
+
+              df = pd.DataFrame([row])
+              if os.path.exists(csv_path):
+                  df.to_csv(csv_path, mode="a", header=False, index=False)
+              else:
+                  df.to_csv(csv_path, index=False)
+
+              print(f"✅ Data saved to {csv_path}")
+
+          def merge_all_data():
+              files = glob("data/*/karachi.csv")
+              if not files:
+                  print("No files to merge.")
+                  return
+              all_data = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
+              os.makedirs("data1", exist_ok=True)
+              all_data.to_csv("data1/merged_karachi_aqi.csv", index=False)
+              print("✅ Merged file saved to data1/merged_karachi_aqi.csv")
+
+          collect_hourly_data()
+          merge_all_data()
+          EOF
+
+      - name: 📂 Commit and Push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git checkout ${{ github.ref_name }}
-          git add data/
-          git commit -m "📊 AQI + AQICN update - $(date -u)" || echo "No changes to commit"
+          git add data/ data1/
+          git commit -m "📊 Hourly AQI collected and merged - $(date -u)" || echo "No changes to commit"
           git push
-
 
 
