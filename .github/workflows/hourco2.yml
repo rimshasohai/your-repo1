@@ -30,7 +30,6 @@ jobs:
           import os
           from glob import glob
 
-          # Hardcoded API keys (not secure for public repos)
           IQAIR_KEY = "a1c4ea3c-c116-43fb-9d98-81004cf3f771"
           OPENWEATHER_KEY = "ee88310481e99a7843bdedc0cca27fd1"
 
@@ -47,8 +46,14 @@ jobs:
                   data = r.json()
                   pollution = data["data"]["current"]["pollution"]
                   return {
-                      "aqi_index": pollution["aqius"],
-                      "main_pollutant": pollution.get("mainus")
+                      "aqi_index": pollution.get("aqius"),
+                      "pm2_5": pollution.get("p2"),
+                      "pm10": pollution.get("p1"),
+                      "co": pollution.get("co"),
+                      "no2": pollution.get("n2"),
+                      "o3": pollution.get("o3"),
+                      "so2": pollution.get("s2"),
+                      "nh3": pollution.get("nh3")
                   }
               except Exception as e:
                   print("IQAir Pollutants Error:", e)
