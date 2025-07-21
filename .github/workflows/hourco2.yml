@@ -46,17 +46,30 @@ jobs:
                   data = r.json()
                   pollution = data["data"]["current"]["pollution"]
                   return {
-                      "aqi_index": pollution.get("aqius"),
-                      "pm2_5": pollution.get("p2"),
-                      "pm10": pollution.get("p1"),
-                      "co": pollution.get("co"),
-                      "no2": pollution.get("n2"),
-                      "o3": pollution.get("o3"),
-                      "so2": pollution.get("s2"),
-                      "nh3": pollution.get("nh3")
+                      "aqi_index": pollution.get("aqius")
                   }
               except Exception as e:
-                  print("IQAir Pollutants Error:", e)
+                  print("IQAir AQI Error:", e)
+                  return None
+
+          def get_openweather_air_pollution():
+              try:
+                  url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}"
+                  r = requests.get(url)
+                  r.raise_for_status()
+                  data = r.json()
+                  components = data["list"][0]["components"]
+                  return {
+                      "pm2_5": components.get("pm2_5"),
+                      "pm10": components.get("pm10"),
+                      "co": components.get("co"),
+                      "no2": components.get("no2"),
+                      "o3": components.get("o3"),
+                      "so2": components.get("so2"),
+                      "nh3": components.get("nh3")
+                  }
+              except Exception as e:
+                  print("OpenWeather Pollutants Error:", e)
                   return None
 
           def get_weather():
@@ -105,11 +118,12 @@ jobs:
               os.makedirs(folder, exist_ok=True)
               csv_path = f"{folder}/karachi.csv"
 
-              pollutants = get_iqair_aqi()
+              aqi_data = get_iqair_aqi()
+              pollutants = get_openweather_air_pollution()
               weather = get_weather()
               forecast = get_forecast_features()
 
-              if not pollutants or not weather or not forecast:
+              if not aqi_data or not pollutants or not weather or not forecast:
                   print("❌ Incomplete data. Skipping logging.")
                   return
 
@@ -119,6 +133,7 @@ jobs:
                   "hour_of_day": hour_of_day,
                   "day_of_week": day_of_week,
                   "is_weekend": is_weekend,
+                  **aqi_data,
                   **pollutants,
                   **weather,
                   **forecast
@@ -155,5 +170,6 @@ jobs:
           git add data/ data1/
           git commit -m "📊 Hourly AQI collected and merged - $(date -u)" || echo "No changes to commit"
           git push
+
 
 
