@@ -22,9 +22,6 @@ jobs:
         run: pip install pandas requests
 
       - name: 🧠 Collect and Merge AQI Data
-        env:
-          IQAIR_API_KEY: ${{ secrets.IQAIR_API_KEY }}
-          OPENWEATHER_KEY: ${{ secrets.OPENWEATHER_KEY }}
         run: |
           python - <<EOF
           import requests
@@ -33,6 +30,7 @@ jobs:
           import os
           from glob import glob
 
+          # Hardcoded API keys (not secure for public repos)
           IQAIR_KEY = "a1c4ea3c-c116-43fb-9d98-81004cf3f771"
           OPENWEATHER_KEY = "ee88310481e99a7843bdedc0cca27fd1"
 
@@ -49,7 +47,7 @@ jobs:
                   data = r.json()
                   pollution = data["data"]["current"]["pollution"]
                   return {
-                      "aqi_index": pollution["aqius"],  # AQI US scale 0-500
+                      "aqi_index": pollution["aqius"],
                       "main_pollutant": pollution.get("mainus")
                   }
               except Exception as e:
@@ -149,7 +147,6 @@ jobs:
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
-          git checkout ${{ github.ref_name }}
           git add data/ data1/
           git commit -m "📊 Hourly AQI collected and merged - $(date -u)" || echo "No changes to commit"
           git push
